@@ -23,12 +23,8 @@ class BasePipeline(ABC):
 
     name: str = "base"
 
-    def __init__(self, config: dict, prompt: dict, servers: dict) -> None:
+    def __init__(self, config: dict) -> None:
         self.config = config
-        self.prompt = prompt
-        self.servers = servers
-
-    # -- Abstract interface ------------------------------------------------
 
     @abstractmethod
     def check_data(self) -> None:
