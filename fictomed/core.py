@@ -8,6 +8,7 @@ def generate(
     n_ccam: int = 1,
     n_das: int = 5,
     ghm5_pattern: str | None = None,
+    config_file: str | None = None,
 ) -> None:
     """Orchestrate an end-to-end synthetic medical-report generation run."""
     if pipeline_name not in PIPELINES:
@@ -15,8 +16,10 @@ def generate(
             f"Pipeline inconnu : '{pipeline_name}'. "
             f"Valeurs acceptées : {list(PIPELINES.keys())}"
         )
-
-    config = load_config(CONFIG_DIR / "servers.yaml")
+    if config_file:
+        config = load_config(config_file)
+    else:
+        config = load_config(CONFIG_DIR / "servers.yaml")
 
     pipeline = PIPELINES[pipeline_name](
         config=config["pipelines"][pipeline_name],
