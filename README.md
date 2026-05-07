@@ -3,7 +3,7 @@
 Librairie Python pour la génération de séjours médicaux fictifs et de scénarios textuels à partir de plusieurs stratégies spécifiques aux centres.
 
 ![Python](https://img.shields.io/badge/python-3.13+-blue)
-[![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-green.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 ---
 
 ## Table des matières
@@ -129,7 +129,6 @@ PIPELINES = {
  
 Ce projet est sous licence [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](LICENSE.md).
  
-[![CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
  
 Vous êtes libre de :
 - **Partager** — copier et redistribuer le projet
