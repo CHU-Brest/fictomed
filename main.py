@@ -1,50 +1,35 @@
-from __future__ import annotations
+import argparse
 
-from pathlib import Path
-from fictomed.core.config import load_config
-from fictomed.sites.brest.pipeline import BrestPipeline
-
-PIPELINES = {
-    "brest": BrestPipeline,
-}
-
-CONFIG_DIR = Path(__file__).resolve().parent / "fictomed/config"
+from fictomed import PIPELINES, generate
 
 
-def run(
-    pipeline_name: str,
-    n_sejours: int = 1000,
-    n_ccam: int = 1,
-    n_das: int = 5,
-    ghm5_pattern: str | None = None,
-) -> None:
-    """Orchestrate an end-to-end synthetic medical-report generation run."""
-    if pipeline_name not in PIPELINES:
-        raise ValueError(
-            f"Pipeline inconnu : '{pipeline_name}'. "
-            f"Valeurs acceptées : {list(PIPELINES.keys())}"
-        )
-
-    config = load_config(CONFIG_DIR / "servers.yaml")
-
-    pipeline = PIPELINES[pipeline_name](
-        config=config["pipelines"][pipeline_name],
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Génération de séjours fictifs et scénarios médicaux."
     )
-
-    pipeline.check_data()
-    data = pipeline.load_data()
-
-    df = pipeline.get_fictive(
-        data,
-        n_sejours=n_sejours,
-        n_ccam=n_ccam,
-        n_das=n_das,
-        ghm5_pattern=ghm5_pattern,
+    parser.add_argument(
+        "pipeline",
+        choices=list(PIPELINES.keys()),
+        help="Nom du pipeline à utiliser (ex: brest, rennes...)",
     )
-    df = pipeline.get_scenario(df)
+    parser.add_argument("--n-sejours", type=int, default=1000)
+    parser.add_argument("--n-ccam", type=int, default=1)
+    parser.add_argument("--n-das", type=int, default=5)
+    parser.add_argument("--ghm5-pattern", type=str, default=None)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    df = generate(
+        pipeline_name=args.pipeline,
+        n_sejours=args.n_sejours,
+        n_ccam=args.n_ccam,
+        n_das=args.n_das,
+        ghm5_pattern=args.ghm5_pattern,
+    )
+    print(f"✓ {len(df)} séjours générés avec le pipeline '{args.pipeline}'")
 
 
 if __name__ == "__main__":
-    run(
-        pipeline_name="brest",
-    )
+    main()
