@@ -8,3 +8,4 @@ pipelines:
     data:
       input: "data/aphp"     # Répertoire contenant les CSV/Parquet PMSI (source ATIH)
       output: "scenarios/aphp/" # Répertoire de sortie des scenarios générés
+      referentials: "data/aphp/referentials" # Référentiels AP-HP
