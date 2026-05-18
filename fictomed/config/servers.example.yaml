@@ -3,9 +3,9 @@ pipelines:
   brest:
     data:
       input: "data/brest"    # Répertoire contenant les CSV/Parquet PMSI (source SNDS)
-      output: "reports/brest/" # Répertoire de sortie des CRH générés
+      output: "scenarios/brest/" # Répertoire de sortie des scenarios générés
   aphp:
     data:
       input: "data/aphp"     # Répertoire contenant les CSV/Parquet PMSI (source ATIH)
-      output: "reports/aphp/" # Répertoire de sortie des CRH générés
-
+      output: "scenarios/aphp/" # Répertoire de sortie des scenarios générés
+      referentials: "data/aphp/referentials" # Référentiels AP-HP
