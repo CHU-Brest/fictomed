@@ -628,7 +628,7 @@ function buildFileGraph() {
 //  Layout dagre + rendu D3
 // =================================================================
 const NODE_W = 240, NODE_H = 80;
-const SYM_W = 220, SYM_H = 64;
+const SYM_W = 240, SYM_H = 84;
 let zoomBehavior;
 
 function currentGraph() {
@@ -740,9 +740,9 @@ function renderNodes(nodes, edges) {
 
   enter.append('rect').attr('class','node-rect').attr('rx',10);
   enter.append('rect').attr('class','node-band').attr('width',4).attr('rx',2);
-  enter.append('text').attr('class','node-kind').attr('x',16).attr('y',16);
-  enter.append('text').attr('class','node-title').attr('x',16).attr('y',34);
-  enter.append('text').attr('class','node-sub').attr('x',16).attr('y',50);
+  enter.append('text').attr('class','node-kind').attr('x',16).attr('y',18);
+  enter.append('text').attr('class','node-title').attr('x',16).attr('y',38);
+  enter.append('text').attr('class','node-sub').attr('x',16).attr('y',56);
   enter.append('text').attr('class','node-stat').attr('x',16);
   enter.append('circle').attr('class','port').attr('r',4);
   enter.append('circle').attr('class','port').attr('r',4);
@@ -763,10 +763,10 @@ function renderNodes(nodes, edges) {
       return colorBand(d.inDeg + d.outDeg);
     });
   merged.select('text.node-kind').text(d => d.kind);
-  merged.select('text.node-title').text(d => truncate(d.kind === 'file' ? d.name : d.name, 28));
-  merged.select('text.node-sub').text(d => truncate(d.kind === 'file' ? d.dir : d.file, 32));
+  merged.select('text.node-title').text(d => truncate(d.name, 26));
+  merged.select('text.node-sub').text(d => truncateLeft(d.kind === 'file' ? d.dir : d.file, 28));
   merged.select('text.node-stat')
-    .attr('y', d => d.h - 12)
+    .attr('y', d => d.h - 10)
     .text(d => d.kind === 'file'
       ? `↘ ${d.outDeg}   ↙ ${d.inDeg}   · ${d.loc} L`
       : `↘ ${d.outDeg}   ↙ ${d.inDeg}`);
@@ -894,6 +894,7 @@ function updateMinimapViewport(t) {
 
 // --- Utilitaires -------------------------------------------------
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n-1) + '…' : (s || ''); }
+function truncateLeft(s, n) { return s && s.length > n ? '…' + s.slice(s.length - n + 1) : (s || ''); }
 function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function showProgress(label, pct) {
   const p = document.getElementById('progress');
