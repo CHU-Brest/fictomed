@@ -13,6 +13,7 @@ Librairie Python pour la génération de séjours médicaux fictifs et de scéna
 - [Utilisation](#utilisation)
 - [Pipelines disponibles](#pipelines-disponibles)
 - [Architecture](#architecture)
+- [Cartographie](#cartographie)
 - [Contribuer](#contribuer)
 - [Licence](#licence)
 
@@ -95,6 +96,14 @@ fictomed/
         ├── __init__.py
         └── pipeline.py
 ```
+
+---
+
+## Cartographie
+
+Visualisation interactive du graphe d'imports entre modules : <https://chu-brest.github.io/fictomed/>
+
+Voir [docs/README.md](docs/README.md).
 
 ---
 

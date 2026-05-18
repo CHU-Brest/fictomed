@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cartographie des dépendances · fictomed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1014;
+    --bg-2: #14171d;
+    --panel: #1a1d24;
+    --panel-2: #21252e;
+    --border: #2a2f3a;
+    --text: #e6e8ec;
+    --muted: #8a93a6;
+    --accent: #ff6d5a;
+    --accent-2: #ff8a6e;
+    --edge: #4a5366;
+    --grid: #1f2330;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .panel { background: var(--panel); border: 1px solid var(--border); }
+  .btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-accent { background: var(--accent); color: #1a0a06; border: 1px solid var(--accent); }
+  .btn-accent:hover { background: var(--accent-2); }
+  input, select { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  /* Grille de fond façon n8n */
+  #canvas { background:
+    radial-gradient(circle, var(--grid) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--bg);
+  }
+  .node-rect { fill: var(--panel); stroke: var(--border); stroke-width: 1.2; }
+  .node-rect.selected { stroke: var(--accent); stroke-width: 2; }
+  .node-band { fill: var(--accent); }
+  .node-title { fill: var(--text); font-weight: 600; font-size: 13px; }
+  .node-sub { fill: var(--muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .node-stat { fill: var(--muted); font-size: 11px; }
+  .port { fill: var(--bg-2); stroke: var(--edge); }
+  .edge-path { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+  .edge-path.hl { stroke: var(--accent); stroke-width: 2.2; }
+  .progress-bar { background: var(--panel-2); }
+  .progress-bar > div { background: var(--accent); transition: width .15s; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 4px; }
+</style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+<!-- Barre de configuration -->
+<header class="panel flex flex-wrap items-end gap-3 px-4 py-3 border-b">
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">Plateforme</div>
+    <select id="f-host" class="text-sm rounded px-2 py-1">
+      <option value="github">GitHub</option>
+      <option value="gitlab">GitLab</option>
+    </select>
+  </div>
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">owner/repo</div>
+    <input id="f-repo" class="text-sm rounded px-2 py-1 mono w-64" placeholder="CHU-Brest/fictomed" />
+  </div>
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">Branche</div>
+    <input id="f-branch" class="text-sm rounded px-2 py-1 mono w-32" placeholder="auto" />
+  </div>
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">Langage</div>
+    <select id="f-lang" class="text-sm rounded px-2 py-1">
+      <option value="python">Python</option>
+      <option value="jsts">JS/TS</option>
+      <option value="r">R</option>
+      <option value="sql">SQL</option>
+    </select>
+  </div>
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">Sens</div>
+    <select id="f-dir" class="text-sm rounded px-2 py-1">
+      <option value="LR">LR</option>
+      <option value="TB">TB</option>
+      <option value="RL">RL</option>
+      <option value="BT">BT</option>
+    </select>
+  </div>
+  <div>
+    <div class="text-[10px] uppercase tracking-wider text-[var(--muted)]">PAT (optionnel)</div>
+    <input id="f-token" type="password" class="text-sm rounded px-2 py-1 mono w-40" placeholder="ghp_…" />
+  </div>
+  <button id="f-go" class="btn-accent rounded px-3 py-1.5 text-sm font-medium">Cartographier</button>
+  <label class="ml-auto flex items-center gap-2 text-xs text-[var(--muted)]">
+    <input id="f-iso" type="checkbox" checked /> Masquer fichiers isolés
+  </label>
+  <input id="f-search" class="text-sm rounded px-2 py-1 mono w-48" placeholder="rechercher un chemin…" />
+</header>
+
+<!-- Barre de progression -->
+<div id="progress" class="hidden px-4 py-2 text-xs text-[var(--muted)] border-b border-[var(--border)] flex items-center gap-3">
+  <span id="progress-label">…</span>
+  <div class="progress-bar rounded h-1.5 flex-1 overflow-hidden"><div id="progress-bar" style="width:0%" class="h-full"></div></div>
+</div>
+
+<main class="flex-1 flex overflow-hidden">
+  <!-- Toile -->
+  <section class="relative flex-1 overflow-hidden">
+    <svg id="canvas" class="w-full h-full">
+      <defs>
+        <marker id="arr" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,-5L10,0L0,5" fill="var(--edge)"></path>
+        </marker>
+        <marker id="arr-hl" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,-5L10,0L0,5" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+      <g id="viewport">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </g>
+    </svg>
+
+    <!-- Toolbar -->
+    <div class="absolute top-3 left-3 flex gap-1">
+      <button id="t-zin" class="btn rounded px-2 py-1 text-xs">+</button>
+      <button id="t-zout" class="btn rounded px-2 py-1 text-xs">−</button>
+      <button id="t-fit" class="btn rounded px-2 py-1 text-xs">fit</button>
+      <button id="t-relayout" class="btn rounded px-2 py-1 text-xs">relayout</button>
+    </div>
+
+    <!-- Mini-map -->
+    <div class="absolute bottom-3 right-3 panel rounded overflow-hidden" style="width:200px;height:140px">
+      <svg id="minimap" class="w-full h-full"></svg>
+    </div>
+
+    <!-- Etat vide -->
+    <div id="empty" class="absolute inset-0 flex items-center justify-center text-[var(--muted)] text-sm">
+      Renseigne un dépôt et clique sur « Cartographier ».
+    </div>
+  </section>
+
+  <!-- Panneau de droite -->
+  <aside class="w-[340px] panel border-l overflow-y-auto p-4 space-y-4 text-sm">
+    <div>
+      <h2 class="text-xs uppercase tracking-wider text-[var(--muted)] mb-2">Synthèse</h2>
+      <div id="summary" class="space-y-1 text-xs">—</div>
+    </div>
+    <div>
+      <h2 class="text-xs uppercase tracking-wider text-[var(--muted)] mb-2">Détail</h2>
+      <div id="detail" class="text-xs text-[var(--muted)]">Sélectionne un nœud pour voir le détail.</div>
+    </div>
+  </aside>
+</main>
+
+<script>
+// ============================================================
+//  Cartographie de dépendances — vue interactive type n8n
+//  Tout en un fichier : pas de build, dépendances en CDN.
+// ============================================================
+
+// --- État global -------------------------------------------------
+const state = {
+  files: [],          // [{ path, content, loc }]
+  graph: { nodes: [], edges: [] },
+  byPath: new Map(),  // path -> node
+  selected: null,
+  host: 'github',
+  owner: '', repo: '', branch: '', lang: 'python', dir: 'LR',
+  hideIsolated: true,
+  search: '',
+};
+
+// --- Détection du dépôt courant sur *.github.io -----------------
+// Quand servie depuis https://<owner>.github.io/<repo>/, on déduit
+// owner/repo automatiquement pour pré-remplir le formulaire.
+function detectRepoFromUrl() {
+  try {
+    const host = location.hostname;
+    const m = host.match(/^([^.]+)\.github\.io$/i);
+    if (!m) return null;
+    const owner = m[1];
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts.length === 0) return null;
+    return `${owner}/${parts[0]}`;
+  } catch { return null; }
+}
+
+// --- Réglages langage -------------------------------------------
+const LANGS = {
+  python: {
+    exts: ['.py'],
+    parse: (src) => {
+      const out = new Set();
+      const re = /^\s*(?:from\s+([\w\.]+)\s+import|import\s+([\w\.,\s]+))/gm;
+      let m;
+      while ((m = re.exec(src)) !== null) {
+        if (m[1]) out.add(m[1]);
+        if (m[2]) m[2].split(',').forEach(s => out.add(s.trim().split(/\s+as\s+/)[0]));
+      }
+      return [...out].filter(Boolean);
+    },
+    // Résolution module Python -> chemin du dépôt
+    resolve: (mod, fromPath, allPaths) => {
+      const candidates = [];
+      const parts = mod.split('.');
+      // Chemin absolu depuis la racine
+      candidates.push(parts.join('/') + '.py');
+      candidates.push(parts.join('/') + '/__init__.py');
+      // Relatif au répertoire du fichier importeur
+      const baseDir = fromPath.split('/').slice(0, -1);
+      for (let i = 0; i <= baseDir.length; i++) {
+        const prefix = baseDir.slice(0, i).join('/');
+        const p1 = (prefix ? prefix + '/' : '') + parts.join('/') + '.py';
+        const p2 = (prefix ? prefix + '/' : '') + parts.join('/') + '/__init__.py';
+        candidates.push(p1); candidates.push(p2);
+      }
+      for (const c of candidates) if (allPaths.has(c)) return c;
+      return null;
+    },
+  },
+  jsts: {
+    exts: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
+    parse: (src) => {
+      const out = new Set();
+      const re = /(?:import\s[^'"]*from\s+|require\(\s*|import\(\s*)['"]([^'"]+)['"]/g;
+      let m; while ((m = re.exec(src)) !== null) out.add(m[1]);
+      return [...out];
+    },
+    resolve: (mod, fromPath, allPaths) => {
+      if (!mod.startsWith('.') && !mod.startsWith('/')) return null; // externe
+      const baseDir = fromPath.split('/').slice(0, -1);
+      const segs = mod.split('/');
+      const stack = [...baseDir];
+      for (const s of segs) {
+        if (s === '.') continue;
+        else if (s === '..') stack.pop();
+        else stack.push(s);
+      }
+      const base = stack.join('/');
+      const exts = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+                    '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+      for (const e of exts) if (allPaths.has(base + e)) return base + e;
+      return null;
+    },
+  },
+  r: {
+    exts: ['.R', '.r'],
+    parse: (src) => {
+      const out = new Set();
+      const re = /(?:library|require)\(\s*["']?([\w\.]+)|source\(\s*["']([^"']+)/g;
+      let m; while ((m = re.exec(src)) !== null) out.add(m[1] || m[2]);
+      return [...out].filter(Boolean);
+    },
+    resolve: (mod, fromPath, allPaths) => {
+      if (allPaths.has(mod)) return mod;
+      const baseDir = fromPath.split('/').slice(0, -1).join('/');
+      const cand = (baseDir ? baseDir + '/' : '') + mod;
+      if (allPaths.has(cand)) return cand;
+      return null;
+    },
+  },
+  sql: {
+    exts: ['.sql'],
+    parse: (src) => {
+      const out = new Set();
+      const re = /(?:--\s*@?include\s+|\\i\s+)([^\s\r\n;]+\.sql)/gi;
+      let m; while ((m = re.exec(src)) !== null) out.add(m[1]);
+      return [...out];
+    },
+    resolve: (mod, fromPath, allPaths) => {
+      if (allPaths.has(mod)) return mod;
+      const baseDir = fromPath.split('/').slice(0, -1).join('/');
+      const cand = (baseDir ? baseDir + '/' : '') + mod;
+      if (allPaths.has(cand)) return cand;
+      return null;
+    },
+  },
+};
+
+// --- Helpers HTTP ------------------------------------------------
+function authHeaders() {
+  const t = sessionStorage.getItem('pat');
+  return t ? { Authorization: `token ${t}` } : {};
+}
+async function ghJson(url) {
+  const r = await fetch(url, { headers: { Accept: 'application/vnd.github+json', ...authHeaders() } });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+async function rawText(url) {
+  const r = await fetch(url, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.text();
+}
+
+// --- Concurrence limitée ----------------------------------------
+async function pool(items, n, fn, onProgress) {
+  const it = items[Symbol.iterator]();
+  let done = 0;
+  async function worker() {
+    for (;;) {
+      const { value, done: d } = it.next();
+      if (d) return;
+      try { await fn(value); } catch (e) { console.warn(e); }
+      done++; onProgress && onProgress(done, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: n }, worker));
+}
+
+// --- Pipeline principal -----------------------------------------
+async function run() {
+  // Lecture du formulaire
+  state.host   = document.getElementById('f-host').value;
+  const slug   = document.getElementById('f-repo').value.trim();
+  state.lang   = document.getElementById('f-lang').value;
+  state.dir    = document.getElementById('f-dir').value;
+  state.hideIsolated = document.getElementById('f-iso').checked;
+  const token  = document.getElementById('f-token').value.trim();
+  if (token) sessionStorage.setItem('pat', token); else sessionStorage.removeItem('pat');
+  if (!slug.includes('/')) return alert('Format attendu : owner/repo');
+  [state.owner, state.repo] = slug.split('/');
+
+  document.getElementById('empty').classList.add('hidden');
+  showProgress('Récupération du dépôt…', 0);
+
+  try {
+    // 1. Branche par défaut si non précisée (corrige le bug v0)
+    let branch = document.getElementById('f-branch').value.trim();
+    if (state.host === 'github') {
+      if (!branch) {
+        const info = await ghJson(`https://api.github.com/repos/${state.owner}/${state.repo}`);
+        branch = info.default_branch;
+        document.getElementById('f-branch').value = branch;
+      }
+      state.branch = branch;
+
+      // 2. Arborescence récursive
+      showProgress('Listing des fichiers…', 5);
+      const tree = await ghJson(`https://api.github.com/repos/${state.owner}/${state.repo}/git/trees/${branch}?recursive=1`);
+      const exts = LANGS[state.lang].exts;
+      const blobs = tree.tree.filter(t => t.type === 'blob' && exts.some(e => t.path.endsWith(e)));
+      if (blobs.length === 0) { hideProgress(); return alert('Aucun fichier trouvé pour ce langage.'); }
+
+      // 3. Téléchargement via raw.githubusercontent.com (hors quota API)
+      const files = [];
+      await pool(blobs, 8, async (b) => {
+        const url = `https://raw.githubusercontent.com/${state.owner}/${state.repo}/${branch}/${b.path}`;
+        const content = await rawText(url);
+        files.push({ path: b.path, content, loc: content.split('\n').length });
+      }, (d, n) => showProgress(`Téléchargement ${d}/${n}`, 10 + 70 * d / n));
+      state.files = files;
+    } else {
+      // GitLab : API v4
+      const enc = encodeURIComponent(slug);
+      if (!branch) {
+        const info = await ghJson(`https://gitlab.com/api/v4/projects/${enc}`);
+        branch = info.default_branch;
+        document.getElementById('f-branch').value = branch;
+      }
+      state.branch = branch;
+      showProgress('Listing des fichiers…', 5);
+      // GitLab pagine, on prend large
+      let page = 1, all = [];
+      for (;;) {
+        const r = await ghJson(`https://gitlab.com/api/v4/projects/${enc}/repository/tree?recursive=true&ref=${branch}&per_page=100&page=${page}`);
+        all = all.concat(r);
+        if (r.length < 100) break;
+        page++;
+        if (page > 50) break;
+      }
+      const exts = LANGS[state.lang].exts;
+      const blobs = all.filter(t => t.type === 'blob' && exts.some(e => t.path.endsWith(e)));
+      const files = [];
+      await pool(blobs, 8, async (b) => {
+        const url = `https://gitlab.com/api/v4/projects/${enc}/repository/files/${encodeURIComponent(b.path)}/raw?ref=${branch}`;
+        const content = await rawText(url);
+        files.push({ path: b.path, content, loc: content.split('\n').length });
+      }, (d, n) => showProgress(`Téléchargement ${d}/${n}`, 10 + 70 * d / n));
+      state.files = files;
+    }
+
+    // 4. Construction du graphe
+    showProgress('Analyse des imports…', 85);
+    buildGraph();
+
+    // 5. Layout + rendu
+    showProgress('Mise en page…', 95);
+    layoutAndRender();
+    hideProgress();
+  } catch (e) {
+    hideProgress();
+    alert('Erreur : ' + e.message);
+  }
+}
+
+// Construit nœuds + arêtes à partir de state.files
+function buildGraph() {
+  const lang = LANGS[state.lang];
+  const allPaths = new Set(state.files.map(f => f.path));
+  const nodes = state.files.map(f => ({
+    id: f.path,
+    path: f.path,
+    name: f.path.split('/').pop(),
+    dir: f.path.split('/').slice(0, -1).join('/') || '.',
+    loc: f.loc,
+    inDeg: 0, outDeg: 0,
+    externals: new Set(),
+  }));
+  const byPath = new Map(nodes.map(n => [n.path, n]));
+  state.byPath = byPath;
+
+  const edges = [];
+  const seen = new Set();
+  for (const f of state.files) {
+    const imports = lang.parse(f.content);
+    for (const mod of imports) {
+      const target = lang.resolve(mod, f.path, allPaths);
+      if (target && target !== f.path) {
+        const key = f.path + '→' + target;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push({ source: f.path, target });
+        byPath.get(f.path).outDeg++;
+        byPath.get(target).inDeg++;
+      } else {
+        byPath.get(f.path).externals.add(mod);
+      }
+    }
+  }
+  state.graph = { nodes, edges };
+}
+
+// --- Layout dagre + rendu D3 ------------------------------------
+const NODE_W = 240, NODE_H = 80;
+let zoomBehavior;
+
+function layoutAndRender() {
+  const visibleNodes = state.graph.nodes.filter(n => {
+    if (state.hideIsolated && n.inDeg + n.outDeg === 0) return false;
+    if (state.search && !n.path.toLowerCase().includes(state.search.toLowerCase())) return false;
+    return true;
+  });
+  const visIds = new Set(visibleNodes.map(n => n.id));
+  const visibleEdges = state.graph.edges.filter(e => visIds.has(e.source) && visIds.has(e.target));
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: state.dir, nodesep: 30, ranksep: 80, marginx: 40, marginy: 40 });
+  g.setDefaultEdgeLabel(() => ({}));
+  visibleNodes.forEach(n => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
+  visibleEdges.forEach(e => g.setEdge(e.source, e.target));
+  dagre.layout(g);
+
+  // Stockage des positions
+  visibleNodes.forEach(n => {
+    const p = g.node(n.id);
+    n.x = p.x - NODE_W / 2;
+    n.y = p.y - NODE_H / 2;
+  });
+
+  renderNodes(visibleNodes, visibleEdges);
+  renderSummary();
+  fitToView(visibleNodes);
+}
+
+function renderNodes(nodes, edges) {
+  const svg = d3.select('#canvas');
+  const gNodes = d3.select('#nodes');
+  const gEdges = d3.select('#edges');
+
+  // Échelle de couleur selon le couplage total
+  const maxC = d3.max(nodes, n => n.inDeg + n.outDeg) || 1;
+  const colorBand = d3.scaleLinear().domain([0, maxC]).range(['#3a3f4d', getCss('--accent')]);
+
+  // Zoom / pan
+  if (!zoomBehavior) {
+    zoomBehavior = d3.zoom().scaleExtent([0.1, 4]).on('zoom', (ev) => {
+      d3.select('#viewport').attr('transform', ev.transform);
+      updateMinimapViewport(ev.transform);
+    });
+    svg.call(zoomBehavior);
+  }
+
+  // --- Arêtes ---
+  const edgeSel = gEdges.selectAll('path.edge-path').data(edges, d => d.source + '→' + d.target);
+  edgeSel.exit().remove();
+  edgeSel.enter().append('path').attr('class', 'edge-path').attr('marker-end', 'url(#arr)').merge(edgeSel)
+    .attr('d', d => bezier(d));
+
+  // --- Nœuds ---
+  const nodeSel = gNodes.selectAll('g.node').data(nodes, d => d.id);
+  nodeSel.exit().remove();
+  const enter = nodeSel.enter().append('g').attr('class', 'node').style('cursor', 'pointer');
+
+  enter.append('rect').attr('class', 'node-rect').attr('width', NODE_W).attr('height', NODE_H).attr('rx', 10);
+  enter.append('rect').attr('class', 'node-band').attr('width', 4).attr('height', NODE_H).attr('rx', 2);
+  enter.append('text').attr('class', 'node-title').attr('x', 16).attr('y', 24);
+  enter.append('text').attr('class', 'node-sub').attr('x', 16).attr('y', 42);
+  enter.append('text').attr('class', 'node-stat').attr('x', 16).attr('y', 64);
+  // Ports
+  enter.append('circle').attr('class', 'port').attr('cx', 0).attr('cy', NODE_H / 2).attr('r', 4);
+  enter.append('circle').attr('class', 'port').attr('cx', NODE_W).attr('cy', NODE_H / 2).attr('r', 4);
+
+  const merged = enter.merge(nodeSel);
+  merged.attr('transform', d => `translate(${d.x},${d.y})`);
+  merged.select('rect.node-rect').classed('selected', d => state.selected === d.id);
+  merged.select('rect.node-band').attr('fill', d => colorBand(d.inDeg + d.outDeg));
+  merged.select('text.node-title').text(d => truncate(d.name, 28));
+  merged.select('text.node-sub').text(d => truncate(d.dir, 32));
+  merged.select('text.node-stat').text(d => `↘ ${d.outDeg}   ↙ ${d.inDeg}   · ${d.loc} L`);
+
+  // Sélection
+  merged.on('click', (_, d) => { state.selected = d.id; renderDetail(d); renderNodes(nodes, edges); highlight(d.id, edges); });
+
+  // Drag des nœuds
+  merged.call(d3.drag()
+    .on('drag', function (ev, d) {
+      d.x += ev.dx; d.y += ev.dy;
+      d3.select(this).attr('transform', `translate(${d.x},${d.y})`);
+      gEdges.selectAll('path.edge-path').attr('d', e => bezier(e));
+      drawMinimap(nodes);
+    })
+    .on('end', () => drawMinimap(nodes))
+  );
+
+  drawMinimap(nodes);
+}
+
+// Courbe Bézier orthogonale-smooth entre deux nœuds
+function bezier(e) {
+  const s = state.byPath.get(e.source), t = state.byPath.get(e.target);
+  if (!s || !t) return '';
+  const sx = s.x + NODE_W, sy = s.y + NODE_H / 2;
+  const tx = t.x,           ty = t.y + NODE_H / 2;
+  const dx = Math.max(40, Math.abs(tx - sx) / 2);
+  return `M${sx},${sy} C${sx + dx},${sy} ${tx - dx},${ty} ${tx},${ty}`;
+}
+
+function highlight(id, edges) {
+  d3.select('#edges').selectAll('path.edge-path')
+    .classed('hl', e => e.source === id || e.target === id)
+    .attr('marker-end', e => (e.source === id || e.target === id) ? 'url(#arr-hl)' : 'url(#arr)');
+}
+
+// --- Synthèse + détail ------------------------------------------
+function renderSummary() {
+  const ns = state.graph.nodes;
+  const totalLoc = ns.reduce((a, b) => a + b.loc, 0);
+  const topIn  = [...ns].sort((a, b) => b.inDeg - a.inDeg).slice(0, 5);
+  const topOut = [...ns].sort((a, b) => b.outDeg - a.outDeg).slice(0, 5);
+  const fmt = (arr, key) => arr.filter(n => n[key] > 0).map(n => `<li class="flex justify-between gap-2"><span class="mono truncate">${n.path}</span><span class="text-[var(--accent)]">${n[key]}</span></li>`).join('') || '<li class="text-[var(--muted)]">—</li>';
+  document.getElementById('summary').innerHTML = `
+    <div>Modules : <b>${ns.length}</b></div>
+    <div>Total LOC : <b>${totalLoc}</b></div>
+    <div>Arêtes : <b>${state.graph.edges.length}</b></div>
+    <div class="mt-2 text-[var(--muted)] uppercase tracking-wider text-[10px]">Top entrants</div>
+    <ul class="space-y-0.5">${fmt(topIn, 'inDeg')}</ul>
+    <div class="mt-2 text-[var(--muted)] uppercase tracking-wider text-[10px]">Top sortants</div>
+    <ul class="space-y-0.5">${fmt(topOut, 'outDeg')}</ul>
+  `;
+}
+
+function renderDetail(n) {
+  const ins  = state.graph.edges.filter(e => e.target === n.id).map(e => e.source);
+  const outs = state.graph.edges.filter(e => e.source === n.id).map(e => e.target);
+  const exts = [...n.externals];
+  const ghUrl = `https://github.com/${state.owner}/${state.repo}/blob/${state.branch}/${n.path}`;
+  const li = (p) => `<li class="mono truncate hover:text-[var(--accent)] cursor-pointer" data-jump="${p}">${p}</li>`;
+  document.getElementById('detail').innerHTML = `
+    <div class="text-[var(--text)] font-medium">${n.name}</div>
+    <div class="mono text-[var(--muted)]">${n.path}</div>
+    <div class="mt-1">LOC : <b>${n.loc}</b> · entrants : <b>${n.inDeg}</b> · sortants : <b>${n.outDeg}</b></div>
+    <a class="text-[var(--accent)] underline" href="${ghUrl}" target="_blank" rel="noopener">Voir la source ↗</a>
+    <div class="mt-2 uppercase tracking-wider text-[10px] text-[var(--muted)]">Entrants</div>
+    <ul class="space-y-0.5">${ins.map(li).join('') || '<li class="text-[var(--muted)]">—</li>'}</ul>
+    <div class="mt-2 uppercase tracking-wider text-[10px] text-[var(--muted)]">Sortants</div>
+    <ul class="space-y-0.5">${outs.map(li).join('') || '<li class="text-[var(--muted)]">—</li>'}</ul>
+    <div class="mt-2 uppercase tracking-wider text-[10px] text-[var(--muted)]">Externes</div>
+    <ul class="space-y-0.5">${exts.map(e => `<li class="mono text-[var(--muted)]">${e}</li>`).join('') || '<li class="text-[var(--muted)]">—</li>'}</ul>
+  `;
+  document.querySelectorAll('[data-jump]').forEach(el => el.addEventListener('click', () => {
+    const id = el.getAttribute('data-jump');
+    const node = state.byPath.get(id);
+    if (node) { state.selected = id; renderDetail(node); layoutAndRender(); }
+  }));
+}
+
+// --- Mini-map ----------------------------------------------------
+function drawMinimap(nodes) {
+  const svg = d3.select('#minimap');
+  svg.selectAll('*').remove();
+  if (nodes.length === 0) return;
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs.map((x, i) => x + NODE_W));
+  const minY = Math.min(...ys), maxY = Math.max(...ys.map((y, i) => y + NODE_H));
+  const w = maxX - minX, h = maxY - minY;
+  const W = 200, H = 140, pad = 6;
+  const s = Math.min((W - 2 * pad) / w, (H - 2 * pad) / h);
+  const g = svg.append('g').attr('transform', `translate(${pad - minX * s},${pad - minY * s}) scale(${s})`);
+  g.selectAll('rect').data(nodes).enter().append('rect')
+    .attr('x', d => d.x).attr('y', d => d.y).attr('width', NODE_W).attr('height', NODE_H)
+    .attr('fill', '#2a2f3a').attr('rx', 6);
+  svg.append('rect').attr('id', 'mm-vp').attr('fill', 'none').attr('stroke', 'var(--accent)').attr('stroke-width', 1);
+  state._mm = { minX, minY, w, h, s, pad, W, H };
+  updateMinimapViewport(d3.zoomTransform(document.getElementById('canvas')));
+}
+function updateMinimapViewport(t) {
+  if (!state._mm) return;
+  const svg = document.getElementById('canvas');
+  const rect = svg.getBoundingClientRect();
+  const { minX, minY, s, pad } = state._mm;
+  // Région visible en coords monde
+  const x0 = (-t.x) / t.k, y0 = (-t.y) / t.k;
+  const x1 = x0 + rect.width / t.k, y1 = y0 + rect.height / t.k;
+  d3.select('#mm-vp')
+    .attr('x', pad + (x0 - minX) * s).attr('y', pad + (y0 - minY) * s)
+    .attr('width', (x1 - x0) * s).attr('height', (y1 - y0) * s);
+}
+
+// --- Utilitaires -------------------------------------------------
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function showProgress(label, pct) {
+  const p = document.getElementById('progress');
+  p.classList.remove('hidden');
+  document.getElementById('progress-label').textContent = label;
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+function hideProgress() { document.getElementById('progress').classList.add('hidden'); }
+
+function fitToView(nodes) {
+  if (!nodes.length) return;
+  const svg = document.getElementById('canvas');
+  const r = svg.getBoundingClientRect();
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs) + NODE_W;
+  const minY = Math.min(...ys), maxY = Math.max(...ys) + NODE_H;
+  const w = maxX - minX, h = maxY - minY;
+  const k = Math.min(r.width / (w + 80), r.height / (h + 80), 1);
+  const tx = (r.width - w * k) / 2 - minX * k;
+  const ty = (r.height - h * k) / 2 - minY * k;
+  d3.select('#canvas').transition().duration(300)
+    .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+}
+
+// --- Wiring du formulaire ---------------------------------------
+document.getElementById('f-go').addEventListener('click', run);
+document.getElementById('t-zin').addEventListener('click',  () => d3.select('#canvas').transition().call(zoomBehavior.scaleBy, 1.3));
+document.getElementById('t-zout').addEventListener('click', () => d3.select('#canvas').transition().call(zoomBehavior.scaleBy, 1 / 1.3));
+document.getElementById('t-fit').addEventListener('click',  () => { const v = state.graph.nodes.filter(n => n.x !== undefined); fitToView(v); });
+document.getElementById('t-relayout').addEventListener('click', layoutAndRender);
+document.getElementById('f-iso').addEventListener('change', (e) => { state.hideIsolated = e.target.checked; if (state.graph.nodes.length) layoutAndRender(); });
+document.getElementById('f-search').addEventListener('input', (e) => { state.search = e.target.value; if (state.graph.nodes.length) layoutAndRender(); });
+document.getElementById('f-dir').addEventListener('change', (e) => { state.dir = e.target.value; if (state.graph.nodes.length) layoutAndRender(); });
+
+// Pré-remplissage automatique du dépôt
+const auto = detectRepoFromUrl();
+document.getElementById('f-repo').value = auto || 'CHU-Brest/fictomed';
+const cached = sessionStorage.getItem('pat');
+if (cached) document.getElementById('f-token').value = cached;
+</script>
+</body>
+</html>
