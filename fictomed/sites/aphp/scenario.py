@@ -295,12 +295,32 @@ def _parse_secondary_codes(value: Any) -> list[str]:
         return []
 
     if isinstance(value, list):
-        return [str(code).strip() for code in value if str(code).strip()]
+        return [
+            str(code).strip()
+            for code in value
+            if str(code).strip()
+            and str(code).strip().upper() != "NA"
+            and str(code).strip().lower() != "nan"
+        ]
 
     if isinstance(value, str):
-        return [code.strip() for code in value.replace(";", " ").split() if code.strip()]
+        value = value.strip()
+        if value == "" or value.upper() == "NA" or value.lower() == "nan":
+            return []
 
-    return [str(value).strip()]
+        return [
+            code.strip()
+            for code in value.replace(";", " ").split()
+            if code.strip()
+            and code.strip().upper() != "NA"
+            and code.strip().lower() != "nan"
+        ]
+
+    value = str(value).strip()
+    if value == "" or value.upper() == "NA" or value.lower() == "nan":
+        return []
+
+    return [value]
 
 
 def build_scenario(
