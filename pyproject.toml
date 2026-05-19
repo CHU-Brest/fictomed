@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Package de génération de séjours et de scénario fictifs"
 readme = "README.md"
 requires-python = ">=3.13"
-license = { text = "CC BY-NC-SA 4.0"}
+license = "CC BY-NC-SA 4.0"
 authors = [
     { name = "Arthur LAMARD", email = "arthur.lamard@chu-brest.fr" },
     { name = "Basile FUCHS", email = "basile.fuchs@chu-brest.fr" },
