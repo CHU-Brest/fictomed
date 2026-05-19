@@ -1,9 +1,16 @@
 [project]
 name = "fictomed"
 version = "0.1.0"
-description = "Add your description here"
+description = "Package de génération de séjours et de scénario fictifs"
 readme = "README.md"
 requires-python = ">=3.13"
+license = { text = "CC BY-NC-SA 4.0"}
+authors = [
+    { name = "Arthur LAMARD", email = "arthur.lamard@chu-brest.fr" },
+    { name = "Basile FUCHS", email = "basile.fuchs@chu-brest.fr" },
+    { name = "Claire DECHAUX", email = "claire.dechaux@inria.fr" },
+    { name = "Remi FLICOTEAUX", email = "remi.flicoteaux@aphp.fr" },
+]
 dependencies = [
     "numpy>=2.4.4",
     "polars>=1.40.1",
@@ -15,3 +22,6 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+[project.urls]
+Homepage = "https://github.com/CHU-Brest/fictomed"
+Repository = "https://github.com/CHU-Brest/fictomed"
