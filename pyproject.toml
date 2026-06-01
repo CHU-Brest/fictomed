@@ -1,6 +1,6 @@
 [project]
 name = "fictomed"
-version = "0.1.1"
+version = "0.1.2"
 description = "Package de génération de séjours et de scénario fictifs"
 readme = "README.md"
 license-files = ["LICENSE.md"]
