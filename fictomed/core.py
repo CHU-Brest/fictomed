@@ -1,5 +1,7 @@
 from fictomed.config import load_config
 from fictomed.registry import CONFIG_DIR, PIPELINES
+from pathlib import Path
+from datetime import datetime
 
 
 def generate(
@@ -36,4 +38,18 @@ def generate(
         ghm5_pattern=ghm5_pattern,
     )
     df = pipeline.get_scenario(df)
+
+    output_dir = pipeline.config.get("data", {}).get("output")
+    if output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = output_dir / (
+            f"{pipeline_name}_scenarios_{df.height}_"
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
+        )
+
+        df.write_parquet(output_path)
+        print(f"Scénarios sauvegardés dans {output_path}")
+
     return df

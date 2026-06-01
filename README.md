@@ -51,6 +51,8 @@ pip install -e .
 
 ### En tant que librairie
 
+Pour le pipeline Brest :
+
 ```python
 from fictomed import generate
 
@@ -63,10 +65,25 @@ df = generate(
 )
 ```
 
+Pour le pipeline AP-HP :
+
+```python
+from fictomed import generate
+
+df = generate(
+    pipeline_name="aphp",
+    n_sejours=500,
+)
+```
+
 ### En ligne de commande
 
 ```bash
 python main.py brest --n-sejours 100
+```
+
+```bash
+python main.py aphp --n-sejours 100
 ```
 
 ---
@@ -76,6 +93,7 @@ python main.py brest --n-sejours 100
 | Nom | Site | Description |
 |-----|------|-------------|
 | `brest` | CHU de Brest | Choix des codes CIM10 par pondération selon les extractions SNDS |
+| `aphp` | AP-HP | Génération de scénarios cliniques à partir de profils PMSI AP-HP, avec règles ATIH, templates spécifiques, prompts système et préfixes LLM. |
 
 ---
 
@@ -90,10 +108,27 @@ fictomed/
 ├── base.py            # Définition de la pipeline de base BasePipeline
 ├── ficitve.py         # Fonction général qui permet la génération des séjours fictifs
 ├── scenario.py        # Fonction général qui permet la génération des scenarios fictifs
-└── sites/
-    └── brest/
-        ├── __init__.py
-        └── pipeline.py
+├── config/  
+│ └── servers.yaml 
+└── sites/ 
+    ├── brest/ 
+    │ ├── __init__.py 
+    │ ├── constants.py 
+    │ ├── fictive.py 
+    │ ├── pipeline.py 
+    │ ├── sampler.py 
+    │ └── scenario.py 
+    └── aphp/ 
+        ├── __init__.py 
+        ├── constants.py 
+        ├── fictive.py 
+        ├── loader.py 
+        ├── managment.py 
+        ├── pipeline.py 
+        ├── prompt.py 
+        ├── sampler.py 
+        └── scenario.py 
+
 ```
 
 ---
@@ -112,6 +147,7 @@ from fictomed.sites.nouveau_site.pipeline import NouveauSitePipeline
 
 PIPELINES = {
     "brest": BrestPipeline,
+    "aphp": APHPPipeline,
     "nouveau_site": NouveauSitePipeline,  # ← ajouter ici
 }
 ```
