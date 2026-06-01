@@ -364,7 +364,7 @@ def build_scenario(
     los = profile.get("los")
     los_mean = profile.get("los_mean")
     los_sd = profile.get("los_sd")
-    year=profile.get("year")
+    year = rng.choice(ctx.simulation_years)
 
     if isinstance(los, float) and math.isnan(los):
         los = None
