@@ -344,6 +344,10 @@ def build_scenario(
     np_rng = np_rng or np.random.default_rng()
 
     profile = dict(profile)  # defensive copy
+
+    if profile.get("sexe") is not None:
+        profile["sexe"] = int(profile["sexe"])
+
     profile["icd_parent_code"] = (profile.get("icd_primary_code") or "")[:3]
 
     scenario = _empty_scenario()
