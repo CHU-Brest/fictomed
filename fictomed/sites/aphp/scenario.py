@@ -28,6 +28,8 @@ import polars as pl
 from . import constants as C
 from . import sampler
 
+import math
+
 # ---------------------------------------------------------------------------
 # Context — collected DataFrames + lookup caches
 # ---------------------------------------------------------------------------
@@ -342,28 +344,35 @@ def build_scenario(
     np_rng = np_rng or np.random.default_rng()
 
     profile = dict(profile)  # defensive copy
+
+    if profile.get("sexe") is not None:
+        profile["sexe"] = int(profile["sexe"])
+
     profile["icd_parent_code"] = (profile.get("icd_primary_code") or "")[:3]
 
     scenario = _empty_scenario()
     scenario.update(profile)
 
-    has_age2 = profile.get("age2") is not None
-    has_secondary_in_profile = "icd_secondary_code" in profile and profile[
-        "icd_secondary_code"
-    ] not in (None, [])
+    age2 = profile.get("age2")
+
+    if age2 is not None:
+        scenario["age"] = int(age2)
+    elif profile.get("cage") is not None:
+        scenario["age"] = sampler.random_age(profile["cage"], rng=rng)
+    else:
+        raise ValueError(
+            "Impossible de déterminer l'âge du patient : "
+            "age2 est manquant et aucune colonne cage n'est disponible."
+        )
+    
     los = profile.get("los")
     los_mean = profile.get("los_mean")
     los_sd = profile.get("los_sd")
-
-    if isinstance(profile.get("sexe"), str):
-        profile["sexe"] = int(profile["sexe"])
-
     year = rng.choice(ctx.simulation_years)
 
-    # --- Administrative fields
-    scenario["age"] = (
-        profile["age2"] if has_age2 else sampler.random_age(profile["cage"], rng=rng)
-    )
+    if isinstance(los, float) and math.isnan(los):
+        los = None
+
     scenario["date_entry"], scenario["date_discharge"] = sampler.get_dates_of_stay(
         admission_type=profile.get("admission_type"),
         admission_mode=profile.get("admission_mode"),

@@ -33,6 +33,25 @@ def generate_aphp_fictive(
     pbar.set_description("Chargement profils")
     profiles_df = sc_ctx.profiles
 
+    # Drop incomplete profiles from the new AP-HP scenarios file.
+    # Some rows have missing age / LOS / admission / discharge information
+    # and cannot be used to build a complete scenario.
+    required_cols = [
+        "age2",
+        "los",
+        "admission_mode",
+        "discharge_disposition",
+    ]
+
+    for col in required_cols:
+        if col in profiles_df.columns:
+            if profiles_df[col].dtype in (pl.Float32, pl.Float64):
+                profiles_df = profiles_df.filter(
+                    pl.col(col).is_not_null() & ~pl.col(col).is_nan()
+                )
+            else:
+                profiles_df = profiles_df.filter(pl.col(col).is_not_null())
+
     # Join drg_parent_description if not already present
     if "drg_parent_description" not in profiles_df.columns:
         drg_descr = (
