@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, override
 
 import polars as pl
+import json
 
 
 from fictomed.base import BasePipeline
@@ -23,6 +24,13 @@ from fictomed.sites.aphp import scenario as sc
 from fictomed.sites.aphp.fictive import generate_aphp_fictive
 from fictomed.sites.aphp.scenario import format_aphp_scenario
 
+from fictomed.sites.aphp.code_cards import (
+    CodeCardsRegistry,
+    add_code_cards_to_row,
+)
+
+
+import os
 
 
 
@@ -115,9 +123,74 @@ class APHPPipeline(BasePipeline):
             generate_fn=generate_aphp_fictive,
             seed=seed,
         )
+    
+    # ------------------------------------------------------------------
+    # 4 — load code_cards
+    # ------------------------------------------------------------------
+
+    
+    def _load_code_cards_registry(self) -> CodeCardsRegistry | None:
+        data_config = self.config.get("data", {})
+
+        referentials = data_config.get("referentials")
+        if referentials is None:
+            return None
+
+        referentials_path = Path(referentials)
+
+        exact_dir = Path(
+            data_config.get(
+                "cards_library",
+                referentials_path / "cards_library",
+            )
+        )
+        category_dir = Path(
+            data_config.get(
+                "cards_library_categories",
+                referentials_path / "cards_library_categories",
+            )
+        )
+
+        if not exact_dir.exists() and not category_dir.exists():
+            return None
+
+        return CodeCardsRegistry.from_dirs(
+            exact_dir=exact_dir,
+            category_dir=category_dir,
+        )
+
+
+    def _add_code_cards_to_prompts(self, df: pl.DataFrame) -> pl.DataFrame:
+        registry = self._load_code_cards_registry()
+        if registry is None:
+            print("Aucune librairie de fiches CIM-10 trouvée : prompts non enrichis.")
+            return df
+
+        rows = [
+            add_code_cards_to_row(row, registry)
+            for row in df.iter_rows(named=True)
+        ]
+
+        missing_codes: set[str] = set()
+        for row in rows:
+            raw_missing = row.get("code_cards_missing_codes")
+            if raw_missing:
+                missing_codes.update(json.loads(raw_missing))
+
+        if missing_codes:
+            print(
+                "Attention : aucune fiche CIM-10 retrouvée pour les codes : "
+                + ", ".join(sorted(missing_codes))
+            )
+
+        return pl.DataFrame(rows)
+            
+ 
+
+        
 
     # ------------------------------------------------------------------
-    # 4 — get_scenario
+    # 5 — get_scenario
     # ------------------------------------------------------------------
 
     @override
@@ -141,8 +214,9 @@ class APHPPipeline(BasePipeline):
             atih_rules=atih_rules,
         )
 
-        return df
-    
- 
+        if os.getenv("FICTOMED_APHP_USE_CODE_CARDS") == "1":
+            return self._add_code_cards_to_prompts(df)
 
+        return df
+            
     

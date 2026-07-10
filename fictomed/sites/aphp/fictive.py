@@ -108,7 +108,7 @@ def generate_aphp_fictive(
 
         # Management decision (coding rule + situa text + template)
         dec = managment.define_managment_type(sc_dict, mg_ctx, np_rng=np_rng)
-        sc_dict["situa"] = dec.situa
+        sc_dict["case_management_type_text"] = dec.situa
         sc_dict["coding_rule"] = dec.coding_rule
         sc_dict["template_name"] = dec.template_name
 

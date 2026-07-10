@@ -22,11 +22,27 @@ from typing import Any
 
 from .loader import TEMPLATES_DIR
 
+import os
+from pathlib import Path
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _get_templates_dir() -> Path:
+    """Temporary eval helper.
 
+    Allows switching AP-HP templates with:
+    FICTOMED_APHP_TEMPLATE_SET=template_v1
+    FICTOMED_APHP_TEMPLATE_SET=template_v2
+    """
+    base_dir = Path(__file__).resolve().parent / "templates"
+
+    template_set = os.getenv("FICTOMED_APHP_TEMPLATE_SET")
+    if template_set:
+        return base_dir / template_set
+
+    return base_dir
 
 def _interpret_sexe(sexe: int | str | None) -> str:
     """Return ``"Masculin"`` / ``"Féminin"`` from the PMSI gender code."""
@@ -38,6 +54,40 @@ def _interpret_sexe(sexe: int | str | None) -> str:
 
 def _fmt_date(d: dt.date | None) -> str | None:
     return d.strftime("%d/%m/%Y") if d is not None else None
+
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    try:
+        # gère NaN éventuel
+        if value != value:
+            return False
+    except Exception:
+        pass
+    return str(value).strip() != ""
+
+
+def _format_groupage_ghm(scenario: dict[str, Any]) -> str:
+    """Formatte le groupage PMSI/GHM pour le scénario donné au LLM.
+
+    Attention : drg_parent_code correspond ici à la racine de GHM.
+    """
+    drg_parent_code = scenario.get("drg_parent_code")
+    drg_parent_description = scenario.get("drg_parent_description")
+
+    if not _has_value(drg_parent_code) and not _has_value(drg_parent_description):
+        return ""
+
+    text = "- Groupage PMSI / GHM :\n"
+
+    if _has_value(drg_parent_code):
+        text += f"   * Racine de GHM : {drg_parent_code}\n"
+
+    if _has_value(drg_parent_description):
+        text += f"   * Libellé de la racine de GHM : {drg_parent_description}\n"
+
+
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +220,8 @@ def make_user_prompt(
     # Hospitalisation context + ICD coding block
     case_management_type = scenario.get("case_management_type")
     if case_management_type is not None:
+        SCENARIO += _format_groupage_ghm(scenario)
+
         situa = scenario.get("situa", "")
         SCENARIO += (
             "- Contexte de l'hospitalisation : "
@@ -275,6 +327,13 @@ def load_system_prompt(template_name: str) -> str:
         Filename only (e.g. ``"medical_inpatient.txt"``), as set by
         :func:`fictomed.sites.aphp.managment.define_managment_type`.
     """
-    path = TEMPLATES_DIR / template_name
+    templates_dir = _get_templates_dir()
+
+    filename = str(template_name)
+    if not filename.endswith(".txt"):
+        filename = f"{filename}.txt"
+
+    path = templates_dir / filename
+
     with path.open("r", encoding="utf-8") as f:
         return f.read()
