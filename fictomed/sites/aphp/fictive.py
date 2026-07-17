@@ -90,7 +90,9 @@ def generate_aphp_fictive(
         weights = np.ones(len(profiles_df))
     weights /= weights.sum()
 
-    indices = np_rng.choice(len(profiles_df), size=n_sejours, replace=True, p=weights)
+    n_to_sample = min(n_sejours, len(profiles_df))  ## TEMPORAIRE
+
+    indices = np_rng.choice(len(profiles_df), size=n_to_sample, replace=False, p=weights)   ## FALSE TEMPORAIRE
     sampled = profiles_df[indices]
     pbar.update(1)
 
@@ -108,7 +110,7 @@ def generate_aphp_fictive(
 
         # Management decision (coding rule + situa text + template)
         dec = managment.define_managment_type(sc_dict, mg_ctx, np_rng=np_rng)
-        sc_dict["case_management_type_text"] = dec.situa
+        sc_dict["situa"] = dec.situa
         sc_dict["coding_rule"] = dec.coding_rule
         sc_dict["template_name"] = dec.template_name
 
