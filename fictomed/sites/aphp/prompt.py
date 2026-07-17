@@ -220,14 +220,23 @@ def make_user_prompt(
     # Hospitalisation context + ICD coding block
     case_management_type = scenario.get("case_management_type")
     if case_management_type is not None:
-        SCENARIO += _format_groupage_ghm(scenario)
+        #SCENARIO += _format_groupage_ghm(scenario)
 
         case_management_type_text = scenario.get("case_management_type_text", "")
-        SCENARIO += (
-            "- Contexte de l'hospitalisation : "
-            + case_management_type_text
-            + ". "
-        )
+        situa = scenario.get("situa", "")
+        
+        if situa :
+            SCENARIO += (
+                "- Contexte de l'hospitalisation : "
+                + situa
+                + ".\n"
+            )
+        else :
+            SCENARIO += (
+                "- Contexte de l'hospitalisation : "
+                + "non disponible"
+                + ".\n"
+            )
         SCENARIO += "- Codage CIM10 :\n"
         SCENARIO += (
             "   * Diagnostic principal : "
@@ -236,17 +245,25 @@ def make_user_prompt(
             + (scenario.get("icd_primary_code") or "")
             + ")\n"
         )
-        SCENARIO += "   * Diagnostic associés : \n"
-        SCENARIO += (scenario.get("text_secondary_icd_official") or "") + "\n"
+        text_secondary_icd = (scenario.get("text_secondary_icd_official") or "").strip()
+
+        SCENARIO += "   * Diagnostics associés :\n"
+
+        if text_secondary_icd:
+            for line in text_secondary_icd.splitlines():
+                line = line.strip()
+                if line:
+                    SCENARIO += f"      - {line.lstrip('- ').strip()}\n"
+        else:
+            SCENARIO += "      - aucun\n"
 
     # Surgical / interventional procedure (only for C or K type DRGs)
     drg_parent_code = scenario.get("drg_parent_code") or ""
     procedure = scenario.get("procedure")
     if procedure is not None and drg_parent_code[2:3] in ("C", "K"):
         SCENARIO += (
-            "* Acte CCAM :\n"
-            + (scenario.get("text_procedure") or "").lower()
-            + "\n"
+            "- Acte CCAM : "
+            + (scenario.get("text_procedure") or "").lower() +" (" + (scenario.get("procedure") or "") + ")\n"
         )
 
     # Physician identity
