@@ -10,7 +10,7 @@ The orchestrator calls:
 
 The scenario dict must already contain the management fields added by
 :mod:`fictomed.sites.aphp.managment`:
-- ``situa``          — French description of the hospitalisation context
+- ``case_management_type_text``          — French description of the hospitalisation context
 - ``coding_rule``    — ATIH rule id (e.g. ``"T1"``, ``"D3-2"``, ``"other"``)
 - ``template_name``  — filename of the system-prompt template
 """
@@ -110,7 +110,7 @@ def make_user_prompt(
     Parameters
     ----------
     scenario:
-        Scenario dict enriched with the management fields ``situa``,
+        Scenario dict enriched with the management fields ``case_management_type_text``,
         ``coding_rule``, and ``template_name`` (added by the orchestrator
         after calling :func:`fictomed.sites.aphp.managment.define_managment_type`).
     cancer_codes:
@@ -222,13 +222,11 @@ def make_user_prompt(
     if case_management_type is not None:
         SCENARIO += _format_groupage_ghm(scenario)
 
-        situa = scenario.get("situa", "")
+        case_management_type_text = scenario.get("case_management_type_text", "")
         SCENARIO += (
             "- Contexte de l'hospitalisation : "
-            + situa
+            + case_management_type_text
             + ". "
-            + case_management_description
-            + "\n"
         )
         SCENARIO += "- Codage CIM10 :\n"
         SCENARIO += (
