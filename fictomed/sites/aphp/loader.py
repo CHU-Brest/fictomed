@@ -250,6 +250,7 @@ _PROFILE_RENAME: dict[str, str] = {
     "mode_sortie": "discharge_disposition",
     "mode_hospit": "admission_type",
     "duree": "los",
+    "age": "cage",
     "agean": "age2",
     "nbda": "nb_associated",
 }
