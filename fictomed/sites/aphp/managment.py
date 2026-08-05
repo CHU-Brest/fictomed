@@ -123,16 +123,33 @@ def define_managment_type(
     situa = ""
     # The ATIH coding rule identifier (e.g. "T1", "D3-2", "S1-Chronic")
     coding_rule = ""
-    # System-prompt template filename, default = generic medical inpatient
-    template_name = "medical_inpatient.txt"
+    
+    # Hospitalisation type text + suffix used in template names.
+    # AP-HP historical data use HC/HP, while some older code used
+    # Inpatient/Outpatient. Treat HP as outpatient/ambulatory.
+    admission_type = str(case.get("admission_type") or "").strip().upper()
+    admission_type = admission_type.replace("-", "_").replace(" ", "_")
 
-    # Hospitalisation type text + suffix used in template names
-    if case.get("admission_type") == "Outpatient":
-        text_admission_type = " en hospitalisation ambulatoire"
+    is_outpatient = admission_type in {
+        "HP",
+        "OUTPATIENT",
+        "OUT_PATIENT",
+        "AMBULATOIRE",
+        "HOSPITALISATION_PARTIELLE",
+        "HOSPITALISATION_DE_JOUR",
+        "HDJ",
+    }
+
+    if is_outpatient:
+        text_admission_type = "en hospitalisation ambulatoire"
         ind_template = "out"
     else:
-        text_admission_type = "en hospialisation complète"
+        text_admission_type = "en hospitalisation complète"
         ind_template = "in"
+
+    # System-prompt template filename, default = generic medical template
+    # matching the hospitalization type.
+    template_name = f"medical_{ind_template}patient.txt"
 
     # Onco suffix used by some templates when the primary code is a cancer
     if case.get("icd_primary_code") in ctx.icd_codes_cancer:
@@ -205,7 +222,7 @@ def define_managment_type(
     # Règle T2 : exception à T1 — toxine botulique (ambulatoire)
     elif (
         procedure in ctx.procedure_botulic_toxin
-        and case.get("admission_type") == "Outpatient"
+        and is_outpatient
     ):
         coding_rule = "T2-Toxine"
         situa = (

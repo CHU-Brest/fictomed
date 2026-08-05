@@ -373,6 +373,22 @@ def build_scenario(
     if isinstance(los, float) and math.isnan(los):
         los = None
 
+    admission_type = str(profile.get("admission_type") or "").strip().upper()
+    admission_type = admission_type.replace("-", "_").replace(" ", "_")
+
+    is_outpatient = admission_type in {
+        "HP",
+        "OUTPATIENT",
+        "OUT_PATIENT",
+        "AMBULATOIRE",
+        "HOSPITALISATION_PARTIELLE",
+        "HOSPITALISATION_DE_JOUR",
+        "HDJ",
+    }
+
+    if is_outpatient:
+        los = 0
+
     scenario["date_entry"], scenario["date_discharge"] = sampler.get_dates_of_stay(
         admission_type=profile.get("admission_type"),
         admission_mode=profile.get("admission_mode"),
@@ -383,6 +399,8 @@ def build_scenario(
         rng=rng,
         np_rng=np_rng,
     )
+    if is_outpatient:
+        scenario["date_discharge"] = scenario["date_entry"]
     age = scenario["age"] or 0
     scenario["date_of_birth"] = sampler.random_date_between(
         scenario["date_entry"] - dt.timedelta(days=365 * (age + 1)),

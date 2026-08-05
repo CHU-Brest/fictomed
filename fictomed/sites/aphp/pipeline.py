@@ -183,7 +183,7 @@ class APHPPipeline(BasePipeline):
                 + ", ".join(sorted(missing_codes))
             )
 
-        return pl.DataFrame(rows)
+        return pl.DataFrame(rows, infer_schema_length=None)
             
  
 
@@ -214,9 +214,8 @@ class APHPPipeline(BasePipeline):
             atih_rules=atih_rules,
         )
 
-        if os.getenv("FICTOMED_APHP_USE_CODE_CARDS") == "1":
-            return self._add_code_cards_to_prompts(df)
+        
+        return self._add_code_cards_to_prompts(df)
 
-        return df
-            
+      
     
