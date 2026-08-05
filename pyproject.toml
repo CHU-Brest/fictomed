@@ -3,10 +3,13 @@ name = "fictomed"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.4.4",
     "polars>=1.40.1",
     "pyyaml>=6.0.3",
     "tqdm>=4.67.3",
 ]
+[tool.setuptools.packages.find]
+include = ["fictomed*"]
+exclude = ["data*", "scenarios*", "reports*"]
