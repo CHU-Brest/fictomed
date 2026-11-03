@@ -20,6 +20,7 @@ import datetime as dt
 import random as _random
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -572,17 +573,21 @@ def format_aphp_scenario(
     cancer_codes: frozenset[str],
     atih_rules: dict[str, dict],
     prompt_workflow: str = "one_stage",
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
 ) -> pl.DataFrame:
     """AP-HP-specific scenario formatting.
 
-    Adds:
-    - scenario
-    - user_prompt
-    - system_prompt
-    - prefix
-    - prefix_len
+    Adds the user prompt, the prompt-set provenance, and the columns required
+    by the selected one- or two-stage workflow.
     """
     from fictomed.sites.aphp import prompt
+
+    resolved_prompt_set = prompt.resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=prompt_workflow,
+    )
 
     user_prompts: list[str] = []
     if prompt_workflow not in {"one_stage", "two_stage"}:
@@ -597,23 +602,60 @@ def format_aphp_scenario(
 
     for row in df.iter_rows(named=True):
         user_prompt = prompt.make_user_prompt(row, cancer_codes, atih_rules)
-        prefix = prompt.make_prefix(row, cancer_codes)
+        prefix = prompt.load_prefix(
+            resolved_prompt_set,
+            row,
+            cancer_codes,
+        )
 
         user_prompts.append(user_prompt)
         prefixes.append(prefix)
         if prompt_workflow == "one_stage":
-            system_prompts.append(prompt.load_system_prompt(row["template_name"]))
+            system_prompts.append(
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="one_stage",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
+            )
         else:
             summary_system_prompts.append(
-                prompt.load_system_prompt(row["template_name"], stage="summary")
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="summary",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
             )
             final_system_prompts.append(
-                prompt.load_system_prompt(row["template_name"], stage="final")
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="final",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
             )
 
     common_columns = [
         pl.Series("scenario", user_prompts, dtype=pl.Utf8),
         pl.Series("user_prompt", user_prompts, dtype=pl.Utf8),
+        pl.Series(
+            "prompt_set_name", [resolved_prompt_set.name] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_set_version",
+            [resolved_prompt_set.version] * df.height,
+            dtype=pl.Utf8,
+        ),
+        pl.Series(
+            "prompt_workflow", [prompt_workflow] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_source", [resolved_prompt_set.source] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_content_hash",
+            [resolved_prompt_set.content_hash] * df.height,
+            dtype=pl.Utf8,
+        ),
     ]
     if prompt_workflow == "one_stage":
         return df.with_columns(

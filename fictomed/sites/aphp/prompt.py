@@ -18,32 +18,17 @@ The scenario dict must already contain the management fields added by
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
-from .loader import TEMPLATES_DIR
-
-import os
-from pathlib import Path
+from .prompt_sets import PromptSet
+from .prompt_sets import resolve_prompt_set as _resolve_prompt_set
+from .prompt_sets import template_path
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _get_templates_dir() -> Path:
-    """Temporary eval helper.
-
-    Allows switching AP-HP templates with:
-    FICTOMED_APHP_TEMPLATE_SET=template_v1
-    FICTOMED_APHP_TEMPLATE_SET=template_v2
-    """
-    base_dir = Path(__file__).resolve().parent / "templates"
-
-    template_set = os.getenv("FICTOMED_APHP_TEMPLATE_SET")
-    if template_set:
-        return base_dir / template_set
-
-    return base_dir
-
 def _interpret_sexe(sexe: int | str | None) -> str:
     """Return ``"Masculin"`` / ``"Féminin"`` from the PMSI gender code."""
     if sexe is None:
@@ -65,6 +50,31 @@ def _has_value(value: Any) -> bool:
     except Exception:
         pass
     return str(value).strip() != ""
+
+
+def _first_value(scenario: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = scenario.get(name)
+        if _has_value(value):
+            return value
+    return None
+
+
+def _format_measure(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.1f}".replace(".", ",")
+
+
+def _format_imc(value: Any) -> str:
+    try:
+        return f"{float(value):.1f}".replace(".", ",")
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _format_groupage_ghm(scenario: dict[str, Any]) -> str:
@@ -137,6 +147,27 @@ def make_user_prompt(
     sexe = scenario.get("sexe")
     if sexe is not None:
         SCENARIO += "- Sexe du patient : " + _interpret_sexe(sexe) + "\n"
+
+    taille = _first_value(scenario, "taille_cm", "height_cm", "height")
+    poids = _first_value(scenario, "poids_kg", "weight_kg", "weight")
+    imc = _first_value(scenario, "imc", "bmi")
+    if taille is not None:
+        SCENARIO += f"- Taille : {_format_measure(taille)} cm\n"
+    if poids is not None:
+        SCENARIO += f"- Poids : {_format_measure(poids)} kg"
+        if imc is not None:
+            SCENARIO += f" (IMC {_format_imc(imc)})"
+        SCENARIO += "\n"
+    elif imc is not None:
+        SCENARIO += f"- IMC : {_format_imc(imc)}\n"
+
+    tabac = _first_value(scenario, "tabac", "tobacco_status", "tobacco")
+    if tabac is not None:
+        SCENARIO += f"- Tabac : {tabac}\n"
+
+    alcool = _first_value(scenario, "alcool", "alcohol_status", "alcohol")
+    if alcool is not None:
+        SCENARIO += f"- Alcool : {alcool}\n"
 
     # Dates of stay and birth
     date_entry = scenario.get("date_entry")
@@ -340,10 +371,39 @@ def make_final_user_prompt(base_user_prompt: str, summary: str) -> str:
     )
 
 
-def load_system_prompt(template_name: str, stage: str | None = None) -> str:
-    """Read and return the content of a system-prompt template file.
+def resolve_prompt_set(
+    *,
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
+    workflow: str = "one_stage",
+) -> PromptSet:
+    return _resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=workflow,
+    )
 
-    Mirrors the file-read in ``create_system_prompt`` (utils_v2.py:1284).
+
+def load_prefix(
+    prompt_set: PromptSet,
+    scenario: dict[str, Any],
+    cancer_codes: frozenset[str],
+) -> str:
+    prefix_path = prompt_set.root / "prefix.txt"
+    if prefix_path.is_file():
+        return prefix_path.read_text(encoding="utf-8").rstrip("\n")
+    return make_prefix(scenario, cancer_codes)
+
+
+def load_system_prompt(
+    template_name: str,
+    stage: str | None = None,
+    *,
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
+    resolved_prompt_set: PromptSet | None = None,
+) -> str:
+    """Read a system-prompt template from the selected prompt set.
     Templates live in ``fictomed/sites/aphp/templates/`` and, for staged
     workflows, in its ``summary`` and ``final`` subdirectories.
 
@@ -353,19 +413,15 @@ def load_system_prompt(template_name: str, stage: str | None = None) -> str:
         Filename only (e.g. ``"medical_inpatient.txt"``), as set by
         :func:`fictomed.sites.aphp.managment.define_managment_type`.
     """
-    if stage not in {None, "summary", "final"}:
-        raise ValueError("stage doit valoir None, 'summary' ou 'final'")
+    if stage not in {None, "one_stage", "summary", "final"}:
+        raise ValueError("stage doit valoir None, 'one_stage', 'summary' ou 'final'")
 
-    if stage is None:
-        templates_dir = _get_templates_dir()
-    else:
-        templates_dir = Path(__file__).resolve().parent / "templates" / stage
-
-    filename = str(template_name)
-    if not filename.endswith(".txt"):
-        filename = f"{filename}.txt"
-
-    path = templates_dir / filename
-
-    with path.open("r", encoding="utf-8") as f:
-        return f.read()
+    normalized_stage = stage or "one_stage"
+    workflow = "one_stage" if normalized_stage == "one_stage" else "two_stage"
+    selected = resolved_prompt_set or resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=workflow,
+    )
+    path = template_path(selected, template_name, normalized_stage)
+    return path.read_text(encoding="utf-8")

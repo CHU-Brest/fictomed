@@ -1,7 +1,10 @@
+from datetime import datetime
+from pathlib import Path
+
+import polars as pl
+
 from fictomed.config import load_config
 from fictomed.registry import CONFIG_DIR, PIPELINES
-from pathlib import Path
-from datetime import datetime
 
 
 def generate(
@@ -12,7 +15,9 @@ def generate(
     ghm5_pattern: str | None = None,
     config_file: str | None = None,
     prompt_workflow: str = "one_stage",
-) -> None:
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
+) -> pl.DataFrame:
     """Orchestrate an end-to-end synthetic medical-report generation run."""
     if pipeline_name not in PIPELINES:
         raise ValueError(
@@ -27,6 +32,8 @@ def generate(
     pipeline = PIPELINES[pipeline_name](
         config=config["pipelines"][pipeline_name],
         prompt_workflow=prompt_workflow,
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
     )
 
     pipeline.check_data()
@@ -53,5 +60,23 @@ def generate(
 
         df.write_parquet(output_path)
         print(f"Scénarios sauvegardés dans {output_path}")
+
+        if pipeline_name == "aphp" and prompt_dir is not None:
+            from fictomed.sites.aphp.prompt_sets import (
+                resolve_prompt_set,
+                snapshot_external_prompt_set,
+            )
+
+            resolved_prompt_set = resolve_prompt_set(
+                prompt_set=prompt_set,
+                prompt_dir=prompt_dir,
+                workflow=prompt_workflow,
+            )
+            snapshot_path = snapshot_external_prompt_set(
+                resolved_prompt_set,
+                output_dir,
+            )
+            if snapshot_path is not None:
+                print(f"Jeu de prompts sauvegardé dans {snapshot_path}")
 
     return df

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import polars as pl
 
@@ -27,6 +28,8 @@ class BasePipeline(ABC):
         self,
         config: dict,
         prompt_workflow: str = "one_stage",
+        prompt_set: str = "default",
+        prompt_dir: str | Path | None = None,
     ) -> None:
         self.config = config
         if prompt_workflow not in {"one_stage", "two_stage"}:
@@ -34,6 +37,8 @@ class BasePipeline(ABC):
                 "prompt_workflow doit valoir 'one_stage' ou 'two_stage'"
             )
         self.prompt_workflow = prompt_workflow
+        self.prompt_set = prompt_set
+        self.prompt_dir = prompt_dir
 
     @abstractmethod
     def check_data(self) -> None:

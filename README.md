@@ -76,6 +76,56 @@ df = generate(
 )
 ```
 
+Le pipeline AP-HP utilise par défaut le jeu de prompts `default` en une étape.
+Le jeu `old` conserve les prompts historiques et prend également en charge la
+génération en deux étapes :
+
+```python
+df = generate(
+    pipeline_name="aphp",
+    n_sejours=500,
+    prompt_set="old",
+    prompt_workflow="two_stage",
+)
+```
+
+Un jeu de prompts externe peut être fourni sans modifier le paquet :
+
+```python
+df = generate(
+    pipeline_name="aphp",
+    n_sejours=500,
+    prompt_dir="/chemin/vers/mes_prompts",
+    prompt_workflow="one_stage",
+)
+```
+
+Le dossier doit contenir un `manifest.yaml` et un sous-dossier par étape
+déclarée :
+
+```text
+mes_prompts/
+├── manifest.yaml
+├── prefix.txt
+└── one_stage/
+    ├── medical_inpatient.txt
+    └── ...
+```
+
+Exemple de manifeste :
+
+```yaml
+name: mes_prompts
+version: "1.0"
+workflows:
+  one_stage: true
+  two_stage: false
+```
+
+Le nom, la version, la source et l'empreinte du jeu sont ajoutés au DataFrame.
+Lorsqu'un dossier externe est utilisé, une copie est conservée sous
+`prompts_snapshot/` dans le répertoire de sortie.
+
 ### En ligne de commande
 
 ```bash
@@ -84,6 +134,14 @@ python main.py brest --n-sejours 100
 
 ```bash
 python main.py aphp --n-sejours 100
+```
+
+```bash
+python main.py aphp --n-sejours 100 --prompt-set old --prompt-workflow two_stage
+```
+
+```bash
+python main.py aphp --n-sejours 100 --prompt-dir ./mes_prompts
 ```
 
 ---

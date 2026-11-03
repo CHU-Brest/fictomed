@@ -1,0 +1,6 @@
+name: default
+version: "1.0"
+description: Prompts de génération en une étape
+workflows:
+  one_stage: true
+  two_stage: false
