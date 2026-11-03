@@ -24,6 +24,14 @@ Repository = "https://github.com/CHU-Brest/fictomed"
 [tool.setuptools.packages.find]
 include = ["fictomed*"]
 exclude = ["data*", "scenarios*", "reports*"]
+[tool.setuptools.package-data]
+"fictomed.sites.aphp" = [
+    "templates/*.yaml",
+    "templates/*.yml",
+    "templates/**/*.txt",
+    "templates/**/*.yaml",
+    "templates/**/*.yml",
+]
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"

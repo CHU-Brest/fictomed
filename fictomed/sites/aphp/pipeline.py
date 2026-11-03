@@ -213,6 +213,8 @@ class APHPPipeline(BasePipeline):
             cancer_codes=sc_ctx.cancer_codes,
             atih_rules=atih_rules,
             prompt_workflow=self.prompt_workflow,
+            prompt_set=self.prompt_set,
+            prompt_dir=self.prompt_dir,
         )
 
 

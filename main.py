@@ -21,6 +21,9 @@ def parse_args() -> argparse.Namespace:
         choices=["one_stage", "two_stage"],
         default="one_stage",
     )
+    prompt_source = parser.add_mutually_exclusive_group()
+    prompt_source.add_argument("--prompt-set", default="default")
+    prompt_source.add_argument("--prompt-dir", type=str, default=None)
     return parser.parse_args()
 
 
@@ -33,6 +36,8 @@ def main() -> None:
         n_das=args.n_das,
         ghm5_pattern=args.ghm5_pattern,
         prompt_workflow=args.prompt_workflow,
+        prompt_set=args.prompt_set,
+        prompt_dir=args.prompt_dir,
     )
     print(f"✓ {len(df)} séjours générés avec le pipeline '{args.pipeline}'")
 
