@@ -24,6 +24,15 @@ def generate(
             f"Pipeline inconnu : '{pipeline_name}'. "
             f"Valeurs acceptées : {list(PIPELINES.keys())}"
         )
+    if pipeline_name != "aphp" and (
+        prompt_workflow != "one_stage"
+        or prompt_set != "default"
+        or prompt_dir is not None
+    ):
+        raise ValueError(
+            "Les options prompt_workflow, prompt_set et prompt_dir "
+            "sont réservées à la pipeline AP-HP"
+        )
     if config_file:
         config = load_config(config_file)
     else:
