@@ -1,0 +1,6 @@
+name: old
+version: "1.0"
+description: Prompts historiques AP-HP
+workflows:
+  one_stage: true
+  two_stage: true

@@ -90,7 +90,9 @@ def generate_aphp_fictive(
         weights = np.ones(len(profiles_df))
     weights /= weights.sum()
 
-    indices = np_rng.choice(len(profiles_df), size=n_sejours, replace=True, p=weights)
+    n_to_sample = min(n_sejours, len(profiles_df))  ## TEMPORAIRE
+
+    indices = np_rng.choice(len(profiles_df), size=n_to_sample, replace=False, p=weights)   ## FALSE TEMPORAIRE
     sampled = profiles_df[indices]
     pbar.update(1)
 

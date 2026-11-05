@@ -57,7 +57,7 @@ Pour le pipeline Brest :
 from fictomed import generate
 
 df = generate(
-    pipeline_name="brest",
+    pipeline_name="pmsi_sampling",
     n_sejours=500,
     n_ccam=1,
     n_das=5,
@@ -71,20 +71,82 @@ Pour le pipeline AP-HP :
 from fictomed import generate
 
 df = generate(
-    pipeline_name="aphp",
+    pipeline_name="profile_generation",
     n_sejours=500,
 )
 ```
 
+Le pipeline AP-HP utilise par défaut le jeu de prompts `default` en une étape.
+Le jeu `old` conserve les prompts historiques et prend également en charge la
+génération en deux étapes :
+
+```python
+df = generate(
+    pipeline_name="profile_generation",
+    n_sejours=500,
+    prompt_set="old",
+    prompt_workflow="two_stage",
+)
+```
+
+Un jeu de prompts externe peut être fourni sans modifier le paquet :
+
+```python
+df = generate(
+    pipeline_name="profile_generation",
+    n_sejours=500,
+    prompt_dir="/chemin/vers/mes_prompts",
+    prompt_workflow="one_stage",
+)
+```
+
+Le dossier doit contenir un `manifest.yaml` et un sous-dossier par étape
+déclarée :
+
+```text
+mes_prompts/
+├── manifest.yaml
+├── prefix.txt
+└── one_stage/
+    ├── medical_inpatient.txt
+    └── ...
+```
+
+Exemple de manifeste :
+
+```yaml
+name: mes_prompts
+version: "1.0"
+workflows:
+  one_stage: true
+  two_stage: false
+```
+
+Le nom, la version, la source et l'empreinte du jeu sont ajoutés au DataFrame.
+Lorsqu'un dossier externe est utilisé, une copie est conservée sous
+`prompts_snapshot/` dans le répertoire de sortie.
+
 ### En ligne de commande
 
 ```bash
-python main.py brest --n-sejours 100
+python main.py pmsi_sampling --n-sejours 100
 ```
 
 ```bash
-python main.py aphp --n-sejours 100
+python main.py profile_generation --n-sejours 100
 ```
+
+```bash
+python main.py profile_generation --n-sejours 100 \
+  --prompt-set old --prompt-workflow two_stage
+```
+
+```bash
+python main.py profile_generation --n-sejours 100 --prompt-dir ./mes_prompts
+```
+
+Les anciens noms `brest` et `aphp` restent temporairement acceptés comme
+alias dépréciés.
 
 ---
 
@@ -92,8 +154,8 @@ python main.py aphp --n-sejours 100
 
 | Nom | Site | Description |
 |-----|------|-------------|
-| `brest` | CHU de Brest | Choix des codes CIM10 par pondération selon les extractions SNDS |
-| `aphp` | AP-HP | Génération de scénarios cliniques à partir de profils PMSI AP-HP, avec règles ATIH, templates spécifiques, prompts système et préfixes LLM. |
+| `pmsi_sampling` | CHU de Brest | Choix des codes CIM10 par pondération selon les extractions SNDS |
+| `profile_generation` | AP-HP | Génération de scénarios cliniques à partir de profils PMSI AP-HP, avec règles ATIH, templates spécifiques, prompts système et préfixes LLM. |
 
 ---
 
@@ -146,8 +208,8 @@ fictomed/
 from fictomed.sites.nouveau_site.pipeline import NouveauSitePipeline
 
 PIPELINES = {
-    "brest": BrestPipeline,
-    "aphp": APHPPipeline,
+    "pmsi_sampling": BrestPipeline,
+    "profile_generation": APHPPipeline,
     "nouveau_site": NouveauSitePipeline,  # ← ajouter ici
 }
 ```

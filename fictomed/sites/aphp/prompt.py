@@ -10,7 +10,7 @@ The orchestrator calls:
 
 The scenario dict must already contain the management fields added by
 :mod:`fictomed.sites.aphp.managment`:
-- ``situa``          — French description of the hospitalisation context
+- ``case_management_type_text``          — French description of the hospitalisation context
 - ``coding_rule``    — ATIH rule id (e.g. ``"T1"``, ``"D3-2"``, ``"other"``)
 - ``template_name``  — filename of the system-prompt template
 """
@@ -18,16 +18,17 @@ The scenario dict must already contain the management fields added by
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
-from .loader import TEMPLATES_DIR
+from .prompt_sets import PromptSet
+from .prompt_sets import resolve_prompt_set as _resolve_prompt_set
+from .prompt_sets import template_path
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
 def _interpret_sexe(sexe: int | str | None) -> str:
     """Return ``"Masculin"`` / ``"Féminin"`` from the PMSI gender code."""
     if sexe is None:
@@ -38,6 +39,65 @@ def _interpret_sexe(sexe: int | str | None) -> str:
 
 def _fmt_date(d: dt.date | None) -> str | None:
     return d.strftime("%d/%m/%Y") if d is not None else None
+
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    try:
+        # gère NaN éventuel
+        if value != value:
+            return False
+    except Exception:
+        pass
+    return str(value).strip() != ""
+
+
+def _first_value(scenario: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = scenario.get(name)
+        if _has_value(value):
+            return value
+    return None
+
+
+def _format_measure(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.1f}".replace(".", ",")
+
+
+def _format_imc(value: Any) -> str:
+    try:
+        return f"{float(value):.1f}".replace(".", ",")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_groupage_ghm(scenario: dict[str, Any]) -> str:
+    """Formatte le groupage PMSI/GHM pour le scénario donné au LLM.
+
+    Attention : drg_parent_code correspond ici à la racine de GHM.
+    """
+    drg_parent_code = scenario.get("drg_parent_code")
+    drg_parent_description = scenario.get("drg_parent_description")
+
+    if not _has_value(drg_parent_code) and not _has_value(drg_parent_description):
+        return ""
+
+    text = "- Groupage PMSI / GHM :\n"
+
+    if _has_value(drg_parent_code):
+        text += f"   * Racine de GHM : {drg_parent_code}\n"
+
+    if _has_value(drg_parent_description):
+        text += f"   * Libellé de la racine de GHM : {drg_parent_description}\n"
+
+
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +120,7 @@ def make_user_prompt(
     Parameters
     ----------
     scenario:
-        Scenario dict enriched with the management fields ``situa``,
+        Scenario dict enriched with the management fields ``case_management_type_text``,
         ``coding_rule``, and ``template_name`` (added by the orchestrator
         after calling :func:`fictomed.sites.aphp.managment.define_managment_type`).
     cancer_codes:
@@ -87,6 +147,27 @@ def make_user_prompt(
     sexe = scenario.get("sexe")
     if sexe is not None:
         SCENARIO += "- Sexe du patient : " + _interpret_sexe(sexe) + "\n"
+
+    taille = _first_value(scenario, "taille_cm", "height_cm", "height")
+    poids = _first_value(scenario, "poids_kg", "weight_kg", "weight")
+    imc = _first_value(scenario, "imc", "bmi")
+    if taille is not None:
+        SCENARIO += f"- Taille : {_format_measure(taille)} cm\n"
+    if poids is not None:
+        SCENARIO += f"- Poids : {_format_measure(poids)} kg"
+        if imc is not None:
+            SCENARIO += f" (IMC {_format_imc(imc)})"
+        SCENARIO += "\n"
+    elif imc is not None:
+        SCENARIO += f"- IMC : {_format_imc(imc)}\n"
+
+    tabac = _first_value(scenario, "tabac", "tobacco_status", "tobacco")
+    if tabac is not None:
+        SCENARIO += f"- Tabac : {tabac}\n"
+
+    alcool = _first_value(scenario, "alcool", "alcohol_status", "alcohol")
+    if alcool is not None:
+        SCENARIO += f"- Alcool : {alcool}\n"
 
     # Dates of stay and birth
     date_entry = scenario.get("date_entry")
@@ -170,14 +251,23 @@ def make_user_prompt(
     # Hospitalisation context + ICD coding block
     case_management_type = scenario.get("case_management_type")
     if case_management_type is not None:
+        #SCENARIO += _format_groupage_ghm(scenario)
+
+        case_management_type_text = scenario.get("case_management_type_text", "")
         situa = scenario.get("situa", "")
-        SCENARIO += (
-            "- Contexte de l'hospitalisation : "
-            + situa
-            + ". "
-            + case_management_description
-            + "\n"
-        )
+        
+        if situa :
+            SCENARIO += (
+                "- Contexte de l'hospitalisation : "
+                + situa
+                + ".\n"
+            )
+        else :
+            SCENARIO += (
+                "- Contexte de l'hospitalisation : "
+                + "non disponible"
+                + ".\n"
+            )
         SCENARIO += "- Codage CIM10 :\n"
         SCENARIO += (
             "   * Diagnostic principal : "
@@ -186,17 +276,25 @@ def make_user_prompt(
             + (scenario.get("icd_primary_code") or "")
             + ")\n"
         )
-        SCENARIO += "   * Diagnostic associés : \n"
-        SCENARIO += (scenario.get("text_secondary_icd_official") or "") + "\n"
+        text_secondary_icd = (scenario.get("text_secondary_icd_official") or "").strip()
+
+        SCENARIO += "   * Diagnostics associés :\n"
+
+        if text_secondary_icd:
+            for line in text_secondary_icd.splitlines():
+                line = line.strip()
+                if line:
+                    SCENARIO += f"      - {line.lstrip('- ').strip()}\n"
+        else:
+            SCENARIO += "      - aucun\n"
 
     # Surgical / interventional procedure (only for C or K type DRGs)
     drg_parent_code = scenario.get("drg_parent_code") or ""
     procedure = scenario.get("procedure")
     if procedure is not None and drg_parent_code[2:3] in ("C", "K"):
         SCENARIO += (
-            "* Acte CCAM :\n"
-            + (scenario.get("text_procedure") or "").lower()
-            + "\n"
+            "- Acte CCAM : "
+            + (scenario.get("text_procedure") or "").lower() +" (" + (scenario.get("procedure") or "") + ")\n"
         )
 
     # Physician identity
@@ -263,11 +361,51 @@ def make_prefix(
         """
 
 
-def load_system_prompt(template_name: str) -> str:
-    """Read and return the content of a system-prompt template file.
+def make_final_user_prompt(base_user_prompt: str, summary: str) -> str:
+    """Append the intermediate clinical summary for the final generation."""
+    return (
+        base_user_prompt.rstrip()
+        + "\n\n**RÉSUMÉ CLINIQUE CONTRÔLÉ :**\n"
+        + summary.strip()
+        + "\n"
+    )
 
-    Mirrors the file-read in ``create_system_prompt`` (utils_v2.py:1284).
-    Templates live in ``fictomed/sites/aphp/aphp/templates/``.
+
+def resolve_prompt_set(
+    *,
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
+    workflow: str = "one_stage",
+) -> PromptSet:
+    return _resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=workflow,
+    )
+
+
+def load_prefix(
+    prompt_set: PromptSet,
+    scenario: dict[str, Any],
+    cancer_codes: frozenset[str],
+) -> str:
+    prefix_path = prompt_set.root / "prefix.txt"
+    if prefix_path.is_file():
+        return prefix_path.read_text(encoding="utf-8").rstrip("\n")
+    return make_prefix(scenario, cancer_codes)
+
+
+def load_system_prompt(
+    template_name: str,
+    stage: str | None = None,
+    *,
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
+    resolved_prompt_set: PromptSet | None = None,
+) -> str:
+    """Read a system-prompt template from the selected prompt set.
+    Templates live in ``fictomed/sites/aphp/templates/`` and, for staged
+    workflows, in its ``summary`` and ``final`` subdirectories.
 
     Parameters
     ----------
@@ -275,6 +413,15 @@ def load_system_prompt(template_name: str) -> str:
         Filename only (e.g. ``"medical_inpatient.txt"``), as set by
         :func:`fictomed.sites.aphp.managment.define_managment_type`.
     """
-    path = TEMPLATES_DIR / template_name
-    with path.open("r", encoding="utf-8") as f:
-        return f.read()
+    if stage not in {None, "one_stage", "summary", "final"}:
+        raise ValueError("stage doit valoir None, 'one_stage', 'summary' ou 'final'")
+
+    normalized_stage = stage or "one_stage"
+    workflow = "one_stage" if normalized_stage == "one_stage" else "two_stage"
+    selected = resolved_prompt_set or resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=workflow,
+    )
+    path = template_path(selected, template_name, normalized_stage)
+    return path.read_text(encoding="utf-8")

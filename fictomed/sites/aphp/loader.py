@@ -219,8 +219,12 @@ def load_atih_rules() -> dict[str, dict]:
 # PMSI input data (user-provided, in self.config["data"]["input"])
 # ---------------------------------------------------------------------------
 
+# Chaque motif porte une extension : un motif nu (``scenarios_*``) attrapait
+# aussi les rapports texte déposés à côté des profils (``scenarios_C1_dp.rapport.txt``)
+# et les faisait passer pour « le fichier de profils le plus récent ».
+# ``.pq`` est l'extension historique des profils (``scenarios_bn_all_*.pq``).
 _PMSI_PATTERNS: dict[str, tuple[str, ...]] = {
-    "profiles": ("scenarios_*.parquet", "scenarios_*"),
+    "profiles": ("scenarios_*.parquet", "scenarios_*.pq"),
     "secondary_icd": ("bn_pmsi_related_diag_*.csv",),
     "procedures": ("bn_pmsi_procedures_*.csv",),
 }
@@ -250,6 +254,7 @@ _PROFILE_RENAME: dict[str, str] = {
     "mode_sortie": "discharge_disposition",
     "mode_hospit": "admission_type",
     "duree": "los",
+    "age": "cage",
     "agean": "age2",
     "nbda": "nb_associated",
 }
@@ -269,9 +274,20 @@ _SECONDARY_RENAME: dict[str, str] = {
 
 
 def _safe_rename(lf: pl.LazyFrame, mapping: dict[str, str]) -> pl.LazyFrame:
-    """Rename only the columns of *lf* that actually exist in *mapping*."""
+    """Rename only the columns of *lf* that actually exist in *mapping*,
+    and whose target does not already exist in *lf*."""
     existing = set(lf.collect_schema().names())
-    return lf.rename({k: v for k, v in mapping.items() if k in existing})
+    # On ignore aussi les renommages dont la CIBLE existe déjà : le renommage
+    # age→cage servait l'ancien format (scenarios_bn_all_*.pq) où « age » était
+    # la classe d'âge. Quand le profil apporte déjà « cage » (campagnes C1+),
+    # la donnée est à sa place et « age » porte autre chose (pivot ou âge
+    # exact) : il faut le laisser intact. La collision polars DuplicateError
+    # (« column 'cage' is duplicate ») n'en était que le symptôme.
+    # Ce filtre simple suppose qu'aucune cible du mapping n'est aussi une
+    # source (vérifié par tests/test_aphp_loader.py).
+    return lf.rename(
+        {k: v for k, v in mapping.items() if k in existing and v not in existing}
+    )
 
 
 def _scan_profiles(input_dir: Path) -> pl.LazyFrame:

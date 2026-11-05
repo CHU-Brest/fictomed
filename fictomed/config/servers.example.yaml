@@ -1,10 +1,10 @@
 # Configuration des pipelines (chemins de données)
 pipelines:
-  brest:
+  pmsi_sampling:
     data:
       input: "data/brest"    # Répertoire contenant les CSV/Parquet PMSI (source SNDS)
       output: "scenarios/brest/" # Répertoire de sortie des scenarios générés
-  aphp:
+  profile_generation:
     data:
       input: "data/aphp"     # Répertoire contenant les CSV/Parquet PMSI (source ATIH)
       output: "scenarios/aphp/" # Répertoire de sortie des scenarios générés

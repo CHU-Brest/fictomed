@@ -20,6 +20,7 @@ import datetime as dt
 import random as _random
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -373,6 +374,22 @@ def build_scenario(
     if isinstance(los, float) and math.isnan(los):
         los = None
 
+    admission_type = str(profile.get("admission_type") or "").strip().upper()
+    admission_type = admission_type.replace("-", "_").replace(" ", "_")
+
+    is_outpatient = admission_type in {
+        "HP",
+        "OUTPATIENT",
+        "OUT_PATIENT",
+        "AMBULATOIRE",
+        "HOSPITALISATION_PARTIELLE",
+        "HOSPITALISATION_DE_JOUR",
+        "HDJ",
+    }
+
+    if is_outpatient:
+        los = 0
+
     scenario["date_entry"], scenario["date_discharge"] = sampler.get_dates_of_stay(
         admission_type=profile.get("admission_type"),
         admission_mode=profile.get("admission_mode"),
@@ -383,6 +400,8 @@ def build_scenario(
         rng=rng,
         np_rng=np_rng,
     )
+    if is_outpatient:
+        scenario["date_discharge"] = scenario["date_entry"]
     age = scenario["age"] or 0
     scenario["date_of_birth"] = sampler.random_date_between(
         scenario["date_entry"] - dt.timedelta(days=365 * (age + 1)),
@@ -553,35 +572,103 @@ def format_aphp_scenario(
     df: pl.DataFrame,
     cancer_codes: frozenset[str],
     atih_rules: dict[str, dict],
+    prompt_workflow: str = "one_stage",
+    prompt_set: str = "default",
+    prompt_dir: str | Path | None = None,
 ) -> pl.DataFrame:
     """AP-HP-specific scenario formatting.
 
-    Adds:
-    - scenario
-    - user_prompt
-    - system_prompt
-    - prefix
-    - prefix_len
+    Adds the user prompt, the prompt-set provenance, and the columns required
+    by the selected one- or two-stage workflow.
     """
     from fictomed.sites.aphp import prompt
 
+    resolved_prompt_set = prompt.resolve_prompt_set(
+        prompt_set=prompt_set,
+        prompt_dir=prompt_dir,
+        workflow=prompt_workflow,
+    )
+
     user_prompts: list[str] = []
+    if prompt_workflow not in {"one_stage", "two_stage"}:
+        raise ValueError(
+            "prompt_workflow doit valoir 'one_stage' ou 'two_stage'"
+        )
+
     system_prompts: list[str] = []
     prefixes: list[str] = []
+    summary_system_prompts: list[str] = []
+    final_system_prompts: list[str] = []
 
     for row in df.iter_rows(named=True):
         user_prompt = prompt.make_user_prompt(row, cancer_codes, atih_rules)
-        system_prompt = prompt.load_system_prompt(row["template_name"])
-        prefix = prompt.make_prefix(row, cancer_codes)
+        prefix = prompt.load_prefix(
+            resolved_prompt_set,
+            row,
+            cancer_codes,
+        )
 
         user_prompts.append(user_prompt)
-        system_prompts.append(system_prompt)
         prefixes.append(prefix)
+        if prompt_workflow == "one_stage":
+            system_prompts.append(
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="one_stage",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
+            )
+        else:
+            summary_system_prompts.append(
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="summary",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
+            )
+            final_system_prompts.append(
+                prompt.load_system_prompt(
+                    row["template_name"],
+                    stage="final",
+                    resolved_prompt_set=resolved_prompt_set,
+                )
+            )
 
-    return df.with_columns(
+    common_columns = [
         pl.Series("scenario", user_prompts, dtype=pl.Utf8),
         pl.Series("user_prompt", user_prompts, dtype=pl.Utf8),
-        pl.Series("system_prompt", system_prompts, dtype=pl.Utf8),
-        pl.Series("prefix", prefixes, dtype=pl.Utf8),
-        pl.Series("prefix_len", [len(p) for p in prefixes], dtype=pl.Int64),
+        pl.Series(
+            "prompt_set_name", [resolved_prompt_set.name] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_set_version",
+            [resolved_prompt_set.version] * df.height,
+            dtype=pl.Utf8,
+        ),
+        pl.Series(
+            "prompt_workflow", [prompt_workflow] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_source", [resolved_prompt_set.source] * df.height, dtype=pl.Utf8
+        ),
+        pl.Series(
+            "prompt_content_hash",
+            [resolved_prompt_set.content_hash] * df.height,
+            dtype=pl.Utf8,
+        ),
+    ]
+    if prompt_workflow == "one_stage":
+        return df.with_columns(
+            *common_columns,
+            pl.Series("system_prompt", system_prompts, dtype=pl.Utf8),
+            pl.Series("prefix", prefixes, dtype=pl.Utf8),
+            pl.Series("prefix_len", [len(p) for p in prefixes], dtype=pl.Int64),
+        )
+
+    return df.with_columns(
+        *common_columns,
+        pl.Series("summary_system_prompt", summary_system_prompts, dtype=pl.Utf8),
+        pl.Series("summary_prefix", [""] * df.height, dtype=pl.Utf8),
+        pl.Series("final_system_prompt", final_system_prompts, dtype=pl.Utf8),
+        pl.Series("final_prefix", prefixes, dtype=pl.Utf8),
     )
