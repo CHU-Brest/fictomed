@@ -29,7 +29,7 @@ class BrestPipeline(BasePipeline):
     ``servers.yaml``.
     """
 
-    name = "brest"
+    name = "pmsi_sampling"
 
     SOURCES = constants.SOURCES
 

@@ -42,7 +42,7 @@ class APHPPipeline(BasePipeline):
     ``config["data"]["input"]`` (see ``config/servers.yaml``).
     """
 
-    name = "aphp"
+    name = "profile_generation"
 
     # Stash for context objects built during get_fictive, re-used by get_scenario
     _sc_ctx: sc.ScenarioContext | None = None

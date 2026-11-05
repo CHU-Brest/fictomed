@@ -1,6 +1,6 @@
 import argparse
 
-from fictomed import PIPELINES, generate
+from fictomed import PIPELINE_NAMES, generate
 
 
 def parse_args() -> argparse.Namespace:
@@ -9,8 +9,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "pipeline",
-        choices=list(PIPELINES.keys()),
-        help="Nom du pipeline à utiliser (ex: brest, rennes...)",
+        choices=PIPELINE_NAMES,
+        help="Nom du pipeline à utiliser.",
     )
     parser.add_argument("--n-sejours", type=int, default=1000)
     parser.add_argument("--n-ccam", type=int, default=1)
